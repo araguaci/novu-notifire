@@ -1,6 +1,6 @@
 import { SoftDeleteModel } from 'mongoose-delete';
 import { FilterQuery, Types } from 'mongoose';
-import { MarkMessagesAsEnum, ChannelTypeEnum, ActorTypeEnum } from '@novu/shared';
+import { MessagesStatusEnum, ChannelTypeEnum, ActorTypeEnum } from '@novu/shared';
 
 import { BaseRepository } from '../base-repository';
 import { MessageEntity, MessageDBModel } from './message.entity';
@@ -96,10 +96,70 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
       sort: '-createdAt',
     })
       .read('secondaryPreferred')
+      .populate('template', '_id tags')
       .populate('subscriber', '_id firstName lastName avatar subscriberId')
       .populate('actorSubscriber', '_id firstName lastName avatar subscriberId');
 
     return this.mapEntities(messages);
+  }
+
+  async paginate(
+    {
+      environmentId,
+      channel,
+      subscriberId,
+      tags,
+      read,
+      archived,
+    }: {
+      environmentId: string;
+      subscriberId: string;
+      channel: ChannelTypeEnum;
+      tags?: string[];
+      read?: boolean;
+      archived?: boolean;
+    },
+    options: { limit: number; offset: number; after?: string }
+  ) {
+    const query: MessageQuery & EnforceEnvId = {
+      _environmentId: environmentId,
+      _subscriberId: subscriberId,
+      channel,
+    };
+
+    if (tags && tags?.length > 0) {
+      query.tags = { $in: tags };
+    }
+
+    if (typeof read === 'boolean') {
+      query.read = read;
+    } else {
+      query.read = { $in: [true, false] };
+    }
+
+    if (typeof archived === 'boolean') {
+      if (!archived) {
+        query.$or = [{ archived: { $exists: false } }, { archived: false }];
+      } else {
+        query.archived = true;
+      }
+    } else {
+      query.$or = [{ archived: { $exists: false } }, { archived: { $in: [true, false] } }];
+    }
+
+    return await this.cursorPagination({
+      query,
+      limit: options.limit,
+      offset: options.offset,
+      after: options.after,
+      sort: { createdAt: -1, _id: -1 },
+      paginateField: 'createdAt',
+      enhanceQuery: (queryBuilder) =>
+        queryBuilder
+          .read('secondaryPreferred')
+          .populate('subscriber', '_id firstName lastName avatar subscriberId')
+          .populate('actorSubscriber', '_id firstName lastName avatar subscriberId'),
+    });
   }
 
   async getCount(
@@ -122,7 +182,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
   private getReadSeenUpdateQuery(
     subscriberId: string,
     environmentId: string,
-    markAs: MarkMessagesAsEnum
+    markAs: MessagesStatusEnum
   ): Partial<MessageEntity> & EnforceEnvId {
     const updateQuery: Partial<MessageEntity> & EnforceEnvId = {
       _subscriberId: subscriberId,
@@ -130,22 +190,22 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     };
 
     switch (markAs) {
-      case MarkMessagesAsEnum.READ:
+      case MessagesStatusEnum.READ:
         return {
           ...updateQuery,
           read: false,
         };
-      case MarkMessagesAsEnum.UNREAD:
+      case MessagesStatusEnum.UNREAD:
         return {
           ...updateQuery,
           read: true,
         };
-      case MarkMessagesAsEnum.SEEN:
+      case MessagesStatusEnum.SEEN:
         return {
           ...updateQuery,
           seen: false,
         };
-      case MarkMessagesAsEnum.UNSEEN:
+      case MessagesStatusEnum.UNSEEN:
         return {
           ...updateQuery,
           seen: true,
@@ -155,7 +215,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     }
   }
 
-  private getReadSeenUpdatePayload(markAs: MarkMessagesAsEnum): {
+  private getReadSeenUpdatePayload(markAs: MessagesStatusEnum): {
     read?: boolean;
     lastReadDate?: Date;
     seen?: boolean;
@@ -164,26 +224,26 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     const now = new Date();
 
     switch (markAs) {
-      case MarkMessagesAsEnum.READ:
+      case MessagesStatusEnum.READ:
         return {
           read: true,
           lastReadDate: now,
           seen: true,
           lastSeenDate: now,
         };
-      case MarkMessagesAsEnum.UNREAD:
+      case MessagesStatusEnum.UNREAD:
         return {
           read: false,
           lastReadDate: now,
           seen: true,
           lastSeenDate: now,
         };
-      case MarkMessagesAsEnum.SEEN:
+      case MessagesStatusEnum.SEEN:
         return {
           seen: true,
           lastSeenDate: now,
         };
-      case MarkMessagesAsEnum.UNSEEN:
+      case MessagesStatusEnum.UNSEEN:
         return {
           seen: false,
           lastSeenDate: now,
@@ -202,7 +262,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
   }: {
     subscriberId: string;
     environmentId: string;
-    markAs: MarkMessagesAsEnum;
+    markAs: MessagesStatusEnum;
     channel?: ChannelTypeEnum;
     feedIdentifiers?: string[];
   }) {
@@ -286,7 +346,7 @@ export class MessageRepository extends BaseRepository<MessageDBModel, MessageEnt
     environmentId: string;
     subscriberId: string;
     messageIds: string[];
-    markAs: MarkMessagesAsEnum;
+    markAs: MessagesStatusEnum;
   }) {
     const updatePayload = this.getReadSeenUpdatePayload(markAs);
 

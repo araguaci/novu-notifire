@@ -3,14 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { useMutation } from '@tanstack/react-query';
 import { useMantineColorScheme } from '@mantine/core';
 
+import { FeatureFlagsKeysEnum, ICreateOrganizationDto, IResponseError, ProductUseCases } from '@novu/shared';
 import { JobTitleEnum } from '@novu/shared';
-import type { ProductUseCases, IResponseError, ICreateOrganizationDto, IJwtPayload } from '@novu/shared';
-import { useAuth } from '../../../hooks';
+import { useAuth, useFeatureFlag, useVercelIntegration, useVercelParams } from '../../../hooks';
 import { useSegment } from '../../../components/providers/SegmentProvider';
 import { HubspotForm } from '../../../ee/billing/components/HubspotForm';
 
 import { api } from '../../../api/api.client';
-import { useVercelIntegration, useVercelParams } from '../../../hooks';
 import { ROUTES } from '../../../constants/routes';
 import { HUBSPOT_FORM_IDS } from '../../../constants/hubspotForms';
 import SetupLoader from './SetupLoader';
@@ -18,6 +17,7 @@ import { successMessage } from '@novu/design-system';
 
 export function HubspotSignupForm() {
   const [loading, setLoading] = useState<boolean>();
+  const isV2ExperienceEnabled = useFeatureFlag(FeatureFlagsKeysEnum.IS_V2_EXPERIENCE_ENABLED);
   const navigate = useNavigate();
   const { login, currentUser, currentOrganization, environmentId } = useAuth();
   const { startVercelSetup } = useVercelIntegration();
@@ -54,7 +54,7 @@ export function HubspotSignupForm() {
     // TODO: Move this into useAuth
     const organizationResponseToken = await api.post(`/v1/auth/organizations/${organization._id}/switch`, {});
 
-    login(organizationResponseToken, ROUTES.GET_STARTED);
+    login(organizationResponseToken, isV2ExperienceEnabled ? ROUTES.STUDIO_ONBOARDING : ROUTES.GET_STARTED);
   }
 
   const handleCreateOrganization = async (data: IOrganizationCreateForm) => {
@@ -74,7 +74,7 @@ export function HubspotSignupForm() {
 
       return;
     }
-    navigate(ROUTES.GET_STARTED);
+    navigate(isV2ExperienceEnabled ? ROUTES.STUDIO_ONBOARDING : ROUTES.GET_STARTED);
   };
 
   if (!currentUser || loading) {
