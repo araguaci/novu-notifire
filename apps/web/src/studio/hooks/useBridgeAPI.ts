@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import {
   buildBridgeHTTPClient,
@@ -7,36 +7,54 @@ import {
   type BridgeStatus,
 } from '../../bridgeApi/bridgeApi.client';
 import { useStudioState } from '../StudioStateProvider';
+import { api as cloudApi } from '../../api';
 
-function useBridgeAPI() {
+export function useBridgeAPI() {
   const { bridgeURL } = useStudioState();
 
   return useMemo(() => buildBridgeHTTPClient(bridgeURL), [bridgeURL]);
 }
 
-const BRIDGE_STATUS_REFRESH_INTERVAL_IN_MS = 3 * 1000;
+const BRIDGE_STATUS_REFRESH_INTERVAL_IN_MS = 5 * 1000;
 
 export const useDiscover = (options?: any) => {
+  const { bridgeURL, setBridgeURL } = useStudioState();
   const api = useBridgeAPI();
 
-  return useQuery(
+  const discoverQuery = useQuery(
     ['bridge-workflows'],
     async () => {
       return api.discover();
     },
-    options
+    {
+      refetchOnWindowFocus: true,
+      ...(options || {}),
+    }
   );
+  const { refetch } = discoverQuery;
+
+  useEffect(() => {
+    if (!bridgeURL) {
+      refetch();
+    }
+  }, [bridgeURL, setBridgeURL, refetch]);
+
+  return discoverQuery;
 };
 
 export const useHealthCheck = (options?: any) => {
-  const api = useBridgeAPI();
-  const { bridgeURL } = useStudioState();
+  const bridgeAPI = useBridgeAPI();
+  const { bridgeURL, isLocalStudio } = useStudioState();
 
   const res = useQuery<BridgeStatus>(
     ['bridge-health-check', bridgeURL],
     async () => {
       try {
-        return await api.healthCheck();
+        if (isLocalStudio) {
+          return await bridgeAPI.healthCheck();
+        } else {
+          return await cloudApi.get('/v1/bridge/status');
+        }
       } catch (error) {
         throw error;
       }
@@ -64,7 +82,10 @@ export const useWorkflow = (templateId: string, options?: any) => {
     async () => {
       return api.getWorkflow(templateId);
     },
-    options
+    {
+      refetchOnWindowFocus: true,
+      ...(options || {}),
+    }
   );
 };
 
@@ -79,7 +100,10 @@ export const useWorkflowPreview = (
     async () => {
       return api.getStepPreview({ workflowId, stepId, payload, controls });
     },
-    options
+    {
+      refetchOnWindowFocus: true,
+      ...(options || {}),
+    }
   );
 };
 
@@ -89,7 +113,7 @@ export const useWorkflowTrigger = () => {
 
   const { mutateAsync, ...rest } = useMutation(api.trigger);
 
-  const bridgeUrl = state.local ? state.tunnelBridgeURL : state.storedBridgeURL;
+  const bridgeUrl = state.isLocalStudio ? state.tunnelBridgeURL : state.storedBridgeURL;
 
   async function trigger(params: TriggerParams): Promise<{ data: { transactionId: string } }> {
     return mutateAsync({ ...params, bridgeUrl });

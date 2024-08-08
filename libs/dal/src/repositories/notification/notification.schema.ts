@@ -1,4 +1,4 @@
-import * as mongoose from 'mongoose';
+import mongoose from 'mongoose';
 import { Schema } from 'mongoose';
 
 import { schemaOptions } from '../schema-default.options';
@@ -41,8 +41,11 @@ const notificationSchema = new Schema<NotificationDBModel>(
       type: Schema.Types.Mixed,
     },
     expireAt: Schema.Types.Date,
-    bridge: {
+    controls: {
       type: Schema.Types.Mixed,
+    },
+    tags: {
+      type: [Schema.Types.String],
     },
   },
   schemaOptions

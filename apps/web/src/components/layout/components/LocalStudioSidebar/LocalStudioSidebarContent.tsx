@@ -6,51 +6,67 @@ import { IBridgeWorkflow } from '../../../../studio/types';
 import { NavMenu } from '../../../nav/NavMenu';
 import { NavMenuSection } from '../../../nav/NavMenuSection';
 import { LocalStudioSidebarOrganizationDisplay } from './LocalStudioSidebarOrganizationDisplay';
-import { LocalStudioSidebarToggleButton } from './LocalStudioSidebarToggleButtonProps';
+import { LocalStudioSidebarToggleButton } from './LocalStudioSidebarToggleButton';
 import { token } from '@novu/novui/tokens';
-import { DocsButton } from '../../../docs/DocsButton';
 import { css, cx } from '@novu/novui/css';
-import { NavMenuButtonInner, rawButtonBaseStyles } from '../../../nav/NavMenuButton/NavMenuButton.shared';
 import { useStudioState } from '../../../../studio/StudioStateProvider';
+import { WithLoadingSkeleton } from '@novu/novui';
+import { NavMenuButtonInner, rawButtonBaseStyles } from '../../../nav/NavMenuButton/NavMenuButton.shared';
+import { useDocsModal } from '../../../docs/useDocsModal';
 
 type LocalStudioSidebarContentProps = {
   workflows: IBridgeWorkflow[];
   isLoading?: boolean;
 };
 
-export const LocalStudioSidebarContent: FC<LocalStudioSidebarContentProps> = ({ workflows, isLoading }) => {
+export const LocalStudioSidebarContent: WithLoadingSkeleton<FC<LocalStudioSidebarContentProps>> = ({
+  workflows,
+  isLoading,
+}) => {
   const { organizationName } = useStudioState();
+  const { Component, toggle, setPath } = useDocsModal();
 
   if (isLoading) {
-    return <SidebarContentLoading />;
+    return <LoadingDisplay />;
   }
 
   return (
-    <NavMenu variant="root">
-      <LocalStudioSidebarOrganizationDisplay title={organizationName || 'Your organization '} subtitle="Local studio" />
-      <NavMenuSection>
-        <DocsButton
-          tooltip={'Open a guide'}
-          TriggerButton={({ onClick }) => (
-            <button onClick={onClick} className={css({ width: 'full' })}>
-              <NavMenuButtonInner
-                icon={<IconAdd />}
-                className={cx(css({ cursor: 'pointer', justifyContent: 'flex-start' }), css(rawButtonBaseStyles))}
-              >
-                Add a workflow
-              </NavMenuButtonInner>
-            </button>
-          )}
+    <>
+      <NavMenu variant="root">
+        <LocalStudioSidebarOrganizationDisplay
+          title={'Local Studio'}
+          subtitle={organizationName || 'Your organization '}
         />
-        {workflows?.map((workflow) => (
-          <LocalStudioSidebarToggleButton key={workflow.workflowId} workflow={workflow} />
-        ))}
-      </NavMenuSection>
-    </NavMenu>
+        <NavMenuSection>
+          <button
+            onClick={(e) => {
+              e.preventDefault();
+              setPath('workflow/introduction');
+              toggle();
+            }}
+            className={css({ width: 'full' })}
+          >
+            <NavMenuButtonInner
+              icon={<IconAdd />}
+              className={cx(css({ cursor: 'pointer', justifyContent: 'flex-start' }), css(rawButtonBaseStyles))}
+            >
+              Add a workflow
+            </NavMenuButtonInner>
+          </button>
+
+          {workflows?.map((workflow) => (
+            <LocalStudioSidebarToggleButton key={workflow.workflowId} workflow={workflow} />
+          ))}
+        </NavMenuSection>
+      </NavMenu>
+      <Component />
+    </>
   );
 };
 
-function SidebarContentLoading() {
+LocalStudioSidebarContent.LoadingDisplay = LoadingDisplay;
+
+function LoadingDisplay() {
   return (
     <Stack gap="300" p="75">
       <Flex gap="75">

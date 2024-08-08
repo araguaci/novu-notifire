@@ -1,6 +1,6 @@
-import * as mongoose from 'mongoose';
+import mongoose from 'mongoose';
 import { Schema } from 'mongoose';
-import * as mongooseDelete from 'mongoose-delete';
+const mongooseDelete = require('mongoose-delete');
 
 import { schemaOptions } from '../schema-default.options';
 import { IntegrationDBModel } from './integration.entity';
@@ -60,6 +60,7 @@ const integrationSchema = new Schema<IntegrationDBModel>(
       apiToken: Schema.Types.String,
       channelId: Schema.Types.String,
       phoneNumberIdentification: Schema.Types.String,
+      accessKey: Schema.Types.String,
     },
     active: {
       type: Schema.Types.Boolean,

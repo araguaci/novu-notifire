@@ -9,14 +9,7 @@ on:
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  test_web:
-    uses: ./.github/workflows/reusable-web-e2e.yml
-    with:
-      ee: true
-    secrets: inherit
-
   deploy_web_eu:
-    needs: test_web
     uses: ./.github/workflows/reusable-web-deploy.yml
     with:
       environment: Production
@@ -32,12 +25,11 @@ jobs:
       netlify_alias: prod
       netlify_gh_env: Production
       netlify_site_id: d2e8b860-7016-4202-9256-ebca0f13259a
+      clerk_publishable_key: pk_live_Y2xlcmsuZXUuZGFzaGJvYXJkLm5vdnUuY28k
+      clerk_is_ee_auth_enabled: true
     secrets: inherit
 
   deploy_web_us:
-    needs:
-      - test_web
-      - deploy_web_eu
     uses: ./.github/workflows/reusable-web-deploy.yml
     with:
       environment: Production
@@ -53,17 +45,6 @@ jobs:
       netlify_alias: prod
       netlify_gh_env: Production
       netlify_site_id: 8639d8b9-81f9-44c3-b885-585a7fd2b5ff
-    secrets: inherit
-
-  deploy_docker:
-    needs:
-      - deploy_web_us
-      - deploy_web_eu
-    uses: ./.github/workflows/reusable-docker.yml
-    with:
-      environment: Production
-      package_name: novu/web
-      project_path: apps/web
-      local_tag: novu-web
-      env_tag: prod
+      clerk_publishable_key: pk_live_Y2xlcmsuZGFzaGJvYXJkLm5vdnUuY28k
+      clerk_is_ee_auth_enabled: true
     secrets: inherit

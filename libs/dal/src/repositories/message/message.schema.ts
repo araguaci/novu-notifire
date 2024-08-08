@@ -1,6 +1,6 @@
-import * as mongoose from 'mongoose';
+import mongoose from 'mongoose';
 import { Schema } from 'mongoose';
-import * as mongooseDelete from 'mongoose-delete';
+const mongooseDelete = require('mongoose-delete');
 import { ActorTypeEnum } from '@novu/shared';
 
 import { schemaOptions } from '../schema-default.options';
@@ -53,6 +53,7 @@ const messageSchema = new Schema<MessageDBModel>(
             },
             content: Schema.Types.String,
             resultContent: Schema.Types.String,
+            url: Schema.Types.String,
           },
         ],
         result: {
@@ -115,6 +116,7 @@ const messageSchema = new Schema<MessageDBModel>(
     },
     expireAt: Schema.Types.Date,
     tags: [Schema.Types.String],
+    avatar: Schema.Types.String,
   },
   schemaOptions
 );

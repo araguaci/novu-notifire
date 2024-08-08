@@ -1,4 +1,4 @@
-import { Schema, Types } from 'mongoose';
+import { Types } from 'mongoose';
 import {
   FilterParts,
   BuilderFieldType,
@@ -15,13 +15,15 @@ import {
   INotificationTemplate,
   INotificationTemplateStep,
   IMessageTemplate,
-  NotificationTemplateTypeEnum,
+  ControlsDto,
+  WorkflowTypeEnum,
 } from '@novu/shared';
 
 import { NotificationGroupEntity } from '../notification-group';
 import type { OrganizationId } from '../organization';
 import type { EnvironmentId } from '../environment';
 import type { ChangePropsValueType } from '../../types';
+import { JSONSchema } from 'json-schema-to-ts';
 
 export class NotificationTemplateEntity implements INotificationTemplate {
   _id: string;
@@ -72,7 +74,7 @@ export class NotificationTemplateEntity implements INotificationTemplate {
 
   data?: NotificationTemplateCustomData;
 
-  type?: NotificationTemplateTypeEnum;
+  type?: WorkflowTypeEnum;
 
   rawData?: any;
 
@@ -127,6 +129,12 @@ export class StepVariantEntity implements IStepVariant {
   shouldStopOnFail?: boolean;
 
   bridgeUrl?: string;
+
+  controlVariables?: ControlsDto;
+
+  controls?: {
+    schema: JSONSchema;
+  };
 }
 
 export class NotificationStepEntity extends StepVariantEntity implements INotificationTemplateStep {

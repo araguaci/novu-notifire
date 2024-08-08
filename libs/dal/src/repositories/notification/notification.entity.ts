@@ -1,4 +1,4 @@
-import { ISubscribersDefine, StepTypeEnum } from '@novu/shared';
+import { ControlsDto, ISubscribersDefine, StepTypeEnum } from '@novu/shared';
 
 import { NotificationTemplateEntity } from '../notification-template';
 import type { OrganizationId } from '../organization';
@@ -37,8 +37,8 @@ export class NotificationEntity {
   createdAt?: string;
   updatedAt?: string;
   expireAt?: string;
-
-  bridge?: any;
+  tags?: string[];
+  controls?: ControlsDto;
 }
 
 export type NotificationDBModel = ChangePropsValueType<

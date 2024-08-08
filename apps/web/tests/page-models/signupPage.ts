@@ -98,6 +98,10 @@ export class SignUpPage {
   public async fillUseCaseData() {
     await this.selectJobTitle(jobTitleToLabelMapper[JobTitleEnum.PRODUCT_MANAGER]);
     await this.setCompanyNameTo('Company Name');
-    await this.chooseMultiChannelUseCase();
+    await this.chooseLanguageSelector();
+  }
+
+  public async chooseLanguageSelector() {
+    await this.page.getByTestId('language-checkbox').getByText('PHP').click();
   }
 }

@@ -1,14 +1,14 @@
-import * as http from 'http';
+import http from 'node:http';
 import { AddressInfo } from 'net';
 
 import { SERVER_HOST } from '../constants';
-import * as getPort from 'get-port';
+import getPort from 'get-port';
 
 export const WELL_KNOWN_ROUTE = '/.well-known/novu';
 export const STUDIO_PATH = '/studio';
 import { DevCommandOptions } from '../commands';
 
-export type DevServerOptions = { tunnelOrigin: string } & Partial<
+export type DevServerOptions = { tunnelOrigin: string; anonymousId?: string } & Partial<
   Pick<DevCommandOptions, 'origin' | 'port' | 'studioPort' | 'dashboardUrl' | 'route'>
 >;
 
@@ -63,13 +63,15 @@ export class DevServer {
 
   private serveWellKnownPath(req: http.IncomingMessage, res: http.ServerResponse) {
     res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Access-Control-Allow-Origin', this.options.dashboardUrl);
     res.end(JSON.stringify(this.options));
   }
 
   private serveStudio(req: http.IncomingMessage, res: http.ServerResponse) {
     const studioHTML = `
-    <html>
+    <html class="dark">
       <head>
+        <link href="${this.options.dashboardUrl}/favicon.svg" rel="icon" />
         <title>Novu Studio</title>
       </head>
       <body style="padding: 0; margin: 0;">
@@ -77,11 +79,33 @@ export class DevServer {
           const NOVU_CLOUD_STUDIO_ORIGIN = '${this.options.dashboardUrl}';
 
           function injectIframe(src) {
+           /*
+           * Updates the URL in the parent window for better navigation control.
+           * Example: If the user enters 'http://localhost:PORT/studio/onboarding/preview', it remains unchanged,
+           * otherwise, redirects back to 'http://localhost:PORT/studio/onboarding'.
+           */
+            const getWindowsUrl = (url) => {
+              const studioPath = '/studio';
+              const pathname = window.location.pathname;
+            
+              return url.includes(studioPath) ? url.replace(studioPath, pathname) : url;
+            };
+            
             const iframe = window.document.createElement('iframe');
-            iframe.sandbox = 'allow-forms allow-scripts allow-modals allow-same-origin allow-popups'
+            iframe.sandbox = 'allow-forms allow-scripts allow-modals allow-same-origin allow-popups allow-popups-to-escape-sandbox'
+            iframe.allow = 'clipboard-read; clipboard-write'
             iframe.style = 'width: 100%; height: 100vh; border: none;';
-            iframe.setAttribute('src', src);
+            
+            const currentUrl = getWindowsUrl(src)
+            iframe.setAttribute('src', currentUrl);
             document.body.appendChild(iframe);
+            
+            window.addEventListener('message', (event) => {
+              if (event?.data?.type === 'pathnameChange') {
+                history.replaceState(null, '', event.data?.pathname);
+              }
+            });
+
             return iframe;
           }
 
@@ -92,6 +116,7 @@ export class DevServer {
             url.searchParams.set('application_origin', '${this.options.origin}');
             url.searchParams.set('tunnel_origin', '${this.options.tunnelOrigin}');
             url.searchParams.set('tunnel_route', '${this.options.route}');
+            url.searchParams.set('anonymous_id', '${this.options.anonymousId}');
 
             window.location.href = url.href;
           }

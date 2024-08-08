@@ -5,19 +5,18 @@ import { css } from '@novu/novui/css';
 import { Flex, Grid, GridItem, styled, VStack } from '@novu/novui/jsx';
 import { text, title as RTitle } from '@novu/novui/recipes';
 import { token } from '@novu/novui/tokens';
-import * as mdxBundler from 'mdx-bundler/client';
+import { getMDXComponent } from 'mdx-bundler/client';
 import { PropsWithChildren, ReactNode, useEffect, useMemo } from 'react';
 import { DOCS_URL, MINTLIFY_IMAGE_URL } from './docs.const';
 import { Highlight } from './Highlight';
 import { DocsQueryResults } from './useLoadDocs';
+import { useFrameworkTerminalScript } from '../../hooks/useFrameworkTerminalScript';
 
 const Text = styled('p', text);
 const LiText = styled('span', text);
 const TitleH2 = styled('h2', RTitle);
 const TitleH3 = styled('h3', RTitle);
 const TitleH1 = styled('h1', RTitle);
-
-const getMDXComponent = mdxBundler.getMDXComponent;
 
 const DOCS_WRAPPER_ELEMENT_ID = 'embedded-docs';
 
@@ -38,8 +37,14 @@ export const Docs = ({ code = '', description = '', title = '', isLoading, child
       return null;
     }
 
-    return getMDXComponent(code);
+    return getMDXComponent(code, {
+      frameworkterminal: {
+        FrameworkTerminal: () => <nv-framework-terminal></nv-framework-terminal>,
+      },
+    });
   }, [code]);
+
+  useFrameworkTerminalScript();
 
   // Workaround for img tags that is not parsed correctly by mdx-bundler
   useEffect(() => {

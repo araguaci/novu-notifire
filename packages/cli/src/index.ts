@@ -1,14 +1,15 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
-import { initCommand, devCommand, DevCommandOptions } from './commands';
+import { devCommand, DevCommandOptions } from './commands';
 import { sync } from './commands/sync';
-
+import { green } from 'picocolors';
 import { v4 as uuidv4 } from 'uuid';
 import { AnalyticService, ConfigService } from './services';
+import { IInitCommandOptions, init } from './commands/init';
 
 const analytics = new AnalyticService();
-const config = new ConfigService();
+export const config = new ConfigService();
 if (process.env.NODE_ENV === 'development') {
   config.clearStore();
 }
@@ -19,22 +20,15 @@ const program = new Command();
 program.name('novu').description(`A CLI tool to interact with Novu Cloud`);
 
 program
-  .command('init')
-  .description('Initialize a new project and create an account')
-  .action(() => {
-    initCommand();
-  });
-
-program
   .command('sync')
   .description(
     `Sync your state with Novu Cloud
 
   Specifying the Bridge URL and Secret Key:
-  (e.g., novu sync -b https://acme.org/api/novu -s NOVU_SECRET_KEY)
+  (e.g., npx novu@latest sync -b https://acme.org/api/novu -s NOVU_SECRET_KEY)
 
   Sync with Novu Cloud in Europe:
-  (e.g., novu sync -b https://acme.org/api/novu -s NOVU_SECRET_KEY -a https://eu.api.novu.co)`
+  (e.g., npx novu@latest sync -b https://acme.org/api/novu -s NOVU_SECRET_KEY -a https://eu.api.novu.co)`
   )
   .usage('-b <url> -s <secret-key> [-a <url>]')
   .option('-a, --api-url <url>', 'The Novu Cloud API URL', 'https://api.novu.co')
@@ -63,10 +57,10 @@ program
     `Start Novu Studio and a local tunnel
 
   Running the Bridge application on port 4000: 
-  (e.g., novu dev -p 4000)
+  (e.g., npx novu@latest dev -p 4000)
 
   Running the Bridge application on a different route: 
-  (e.g., novu dev -r /v1/api/novu)`
+  (e.g., npx novu@latest dev -r /v1/api/novu)`
   )
   .usage('[-p <port>] [-r <route>] [-o <origin>] [-d <dashboard-url>] [-sp <studio-port>]')
   .option('-p, --port <port>', 'The local Bridge endpoint port', '4000')
@@ -74,6 +68,28 @@ program
   .option('-o, --origin <origin>', 'The Bridge endpoint origin')
   .option('-d, --dashboard-url <url>', 'The Novu Cloud Dashboard URL', 'https://dashboard.novu.co')
   .option('-sp, --studio-port <port>', 'The Local Studio server port', '2022')
-  .action((options: DevCommandOptions) => devCommand(options));
+  .action(async (options: DevCommandOptions) => {
+    analytics.track({
+      identity: {
+        anonymousId: anonymousId,
+      },
+      data: {},
+      event: 'Open Dev Server',
+    });
+
+    return await devCommand(options, anonymousId);
+  });
+
+program
+  .command('init')
+  .description(`Create a new Novu application`)
+  .option(
+    '-s, --secret-key <secret-key>',
+    `The Novu development environment Secret Key. Note that your Novu app won't work outside of local mode without it.`
+  )
+  .option('-a, --api-url <url>', 'The Novu Cloud API URL', 'https://api.novu.co')
+  .action(async (options: IInitCommandOptions) => {
+    return await init(options, anonymousId);
+  });
 
 program.parse(process.argv);

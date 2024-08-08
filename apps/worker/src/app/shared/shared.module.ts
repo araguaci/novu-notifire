@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import {
   ChangeRepository,
+  ControlVariablesRepository,
   DalService,
   EnvironmentRepository,
   ExecutionDetailsRepository,
@@ -51,13 +52,25 @@ import {
   UpdateSubscriber,
   UpdateSubscriberChannel,
   UpdateTenant,
+  injectCommunityAuthProviders,
+  ExecuteBridgeRequest,
 } from '@novu/application-generic';
 
-import * as packageJson from '../../../package.json';
+import packageJson from '../../../package.json';
 import { CreateLog } from './logs';
-import { JobTopicNameEnum } from '@novu/shared';
+import { JobTopicNameEnum, isClerkEnabled } from '@novu/shared';
 import { ActiveJobsMetricService } from '../workflow/services';
 import { UNIQUE_WORKER_DEPENDENCIES, workersToProcess } from '../../config/worker-init.config';
+
+function getDynamicAuthProviders() {
+  if (isClerkEnabled()) {
+    const eeAuthPackage = require('@novu/ee-auth');
+
+    return eeAuthPackage.injectEEAuthProviders();
+  } else {
+    return injectCommunityAuthProviders();
+  }
+}
 
 const DAL_MODELS = [
   UserRepository,
@@ -82,6 +95,8 @@ const DAL_MODELS = [
   TopicSubscribersRepository,
   TenantRepository,
   WorkflowOverrideRepository,
+  ControlVariablesRepository,
+  ...getDynamicAuthProviders(),
 ];
 
 const dalService = {
@@ -122,6 +137,7 @@ const PROVIDERS = [
   ProcessTenant,
   ...DAL_MODELS,
   ActiveJobsMetricService,
+  ExecuteBridgeRequest,
 ];
 
 @Module({

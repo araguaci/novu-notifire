@@ -126,6 +126,15 @@ describe('Get Notifications - /inbox/notifications (GET)', async () => {
     expect(body.message[0]).to.equal('The after cursor must be a valid MongoDB ObjectId');
   });
 
+  it('should throw exception when filtering for unread and archived notifications', async function () {
+    await triggerEvent(template);
+
+    const { body, status } = await getNotifications({ limit: 1, read: false, archived: true });
+
+    expect(status).to.equal(400);
+    expect(body.message).to.equal('Filtering for unread and archived notifications is not supported.');
+  });
+
   it('should include fields from message entity', async function () {
     await triggerEvent(template);
 
@@ -253,7 +262,7 @@ describe('Get Notifications - /inbox/notifications (GET)', async () => {
       new Date(body.data[1].createdAt).getTime()
     );
     expect(body.hasMore).to.be.false;
-    expect(body.data.every((message) => message.read)).to.be.true;
+    expect(body.data.every((message) => message.isRead)).to.be.true;
   });
 
   it('should filter by archived', async function () {
@@ -277,7 +286,7 @@ describe('Get Notifications - /inbox/notifications (GET)', async () => {
       new Date(body.data[1].createdAt).getTime()
     );
     expect(body.hasMore).to.be.false;
-    expect(body.data.every((message) => message.archived)).to.be.true;
+    expect(body.data.every((message) => message.isArchived)).to.be.true;
   });
 
   it('should filter by archived with pagination', async function () {
@@ -301,7 +310,7 @@ describe('Get Notifications - /inbox/notifications (GET)', async () => {
       new Date(firstPageBody.data[1].createdAt).getTime()
     );
     expect(firstPageBody.hasMore).to.be.true;
-    expect(firstPageBody.data.every((message) => message.archived)).to.be.true;
+    expect(firstPageBody.data.every((message) => message.isArchived)).to.be.true;
 
     const { body: secondPageBody, status: secondPageStatus } = await getNotifications({
       limit,
@@ -316,6 +325,6 @@ describe('Get Notifications - /inbox/notifications (GET)', async () => {
       new Date(secondPageBody.data[1].createdAt).getTime()
     );
     expect(secondPageBody.hasMore).to.be.false;
-    expect(secondPageBody.data.every((message) => message.archived)).to.be.true;
+    expect(secondPageBody.data.every((message) => message.isArchived)).to.be.true;
   });
 });

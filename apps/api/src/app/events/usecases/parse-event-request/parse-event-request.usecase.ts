@@ -1,6 +1,6 @@
 import { Injectable, UnprocessableEntityException, Logger } from '@nestjs/common';
-import * as Sentry from '@sentry/node';
-import * as hat from 'hat';
+import { addBreadcrumb } from '@sentry/node';
+import { randomBytes } from 'crypto';
 import { merge } from 'lodash';
 import { v4 as uuidv4 } from 'uuid';
 import { ModuleRef } from '@nestjs/core';
@@ -18,9 +18,9 @@ import {
   GetFeatureFlag,
   GetFeatureFlagCommand,
   InvalidateCacheService,
-  requireInject,
-  IUseCaseInterface,
-  IDoBridgeRequestCommand,
+  ExecuteBridgeRequest,
+  ExecuteBridgeRequestCommand,
+  ExecuteBridgeRequestDto,
 } from '@novu/application-generic';
 import {
   FeatureFlagsKeysEnum,
@@ -43,7 +43,7 @@ import {
   EnvironmentEntity,
 } from '@novu/dal';
 import { Novu } from '@novu/node';
-import { DiscoverOutput, DiscoverWorkflowOutput } from '@novu/framework';
+import { DiscoverWorkflowOutput, GetActionEnum } from '@novu/framework';
 
 import {
   ParseEventRequestBroadcastCommand,
@@ -57,8 +57,6 @@ const LOG_CONTEXT = 'ParseEventRequest';
 
 @Injectable()
 export class ParseEventRequest {
-  private doBridgeRequest: IUseCaseInterface<IDoBridgeRequestCommand, DiscoverOutput | null>;
-
   constructor(
     private notificationTemplateRepository: NotificationTemplateRepository,
     private notificationRepository: NotificationRepository,
@@ -73,10 +71,9 @@ export class ParseEventRequest {
     private analyticsService: AnalyticsService,
     private getFeatureFlag: GetFeatureFlag,
     private invalidateCacheService: InvalidateCacheService,
+    private executeBridgeRequest: ExecuteBridgeRequest,
     protected moduleRef: ModuleRef
-  ) {
-    this.doBridgeRequest = requireInject('do_bridge_request', this.moduleRef);
-  }
+  ) {}
 
   @InstrumentUsecase()
   public async execute(command: ParseEventRequestCommand) {
@@ -161,7 +158,7 @@ export class ParseEventRequest {
       };
     }
 
-    Sentry.addBreadcrumb({
+    addBreadcrumb({
       message: 'Sending trigger',
       data: {
         triggerIdentifier: command.identifier,
@@ -196,15 +193,13 @@ export class ParseEventRequest {
       return null;
     }
 
-    const discover = await this.doBridgeRequest.execute({
-      bridgeUrl: command.bridgeUrl,
-      apiKey: environment.apiKeys[0].key,
-      action: 'discover',
-    });
-
-    if (!discover) {
-      return null;
-    }
+    const discover = (await this.executeBridgeRequest.execute(
+      ExecuteBridgeRequestCommand.create({
+        bridgeUrl: command.bridgeUrl,
+        apiKey: environment.apiKeys[0].key,
+        action: GetActionEnum.DISCOVER,
+      })
+    )) as ExecuteBridgeRequestDto<GetActionEnum.DISCOVER>;
 
     return discover?.workflows?.find((findWorkflow) => findWorkflow.workflowId === command.identifier) || null;
   }
@@ -296,12 +291,16 @@ export class ParseEventRequest {
   }
 
   private modifyAttachments(command: ParseEventRequestCommand): void {
-    command.payload.attachments = command.payload.attachments.map((attachment) => ({
-      ...attachment,
-      name: attachment.name,
-      file: Buffer.from(attachment.file, 'base64'),
-      storagePath: `${command.organizationId}/${command.environmentId}/${hat()}/${attachment.name}`,
-    }));
+    command.payload.attachments = command.payload.attachments.map((attachment) => {
+      const randomId = randomBytes(16).toString('hex');
+
+      return {
+        ...attachment,
+        name: attachment.name,
+        file: Buffer.from(attachment.file, 'base64'),
+        storagePath: `${command.organizationId}/${command.environmentId}/${randomId}/${attachment.name}`,
+      };
+    });
   }
 
   private getReservedVariablesTypes(template: NotificationTemplateEntity): TriggerContextTypeEnum[] {
@@ -356,9 +355,7 @@ export class ParseEventRequest {
       });
 
       // check if user is using personal email
-      const user = await this.userRepository.findOne({
-        _id: command.userId,
-      });
+      const user = await this.userRepository.findById(command.userId);
 
       if (!user) throw new ApiException('User not found');
 

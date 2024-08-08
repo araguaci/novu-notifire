@@ -1,13 +1,14 @@
 import axios from 'axios';
 import { CustomDataType } from '@novu/shared';
-
 import { API_ROOT } from '../config';
+import { getToken } from '../components/providers/AuthProvider';
+import { getEnvironmentId } from '../components/providers/EnvironmentProvider';
 
 interface IOptions {
   absoluteUrl: boolean;
 }
 
-// @deprecated Migrate all api methods to the new buildAPIHTTPClient that allows runtime configuration on the client object.
+// @deprecated Migrate all api methods to the new buildApiHttpClient that allows runtime configuration on the client object.
 export const api = {
   get(url: string, options: IOptions = { absoluteUrl: false }) {
     return axios
@@ -84,27 +85,32 @@ function buildUrl(url: string, absoluteUrl: boolean) {
 }
 
 function getHeaders() {
-  const token = localStorage.getItem('auth_token');
+  // TODO: change the way we get the clerk token
+  const token = getToken();
+  const lastEnvironmentId = getEnvironmentId();
 
   return token
     ? {
         Authorization: `Bearer ${token}`,
+        'Novu-Environment-Id': lastEnvironmentId || '',
       }
     : {};
 }
 
 // WIP: The static API client needs to be replaced by a dynamic API client where api keys are injected.
-export function buildAPIHTTPClient({
+export function buildApiHttpClient({
   baseURL = API_ROOT || 'https://api.novu.co',
   secretKey,
   jwt,
+  environmentId,
 }: {
   baseURL?: string;
   secretKey?: string;
   jwt?: string;
+  environmentId?: string;
 }) {
   if (!secretKey && !jwt) {
-    throw new Error('An secretKey or jwt is required to create a Novu API client.');
+    throw new Error('A secretKey or jwt is required to create a Novu API client.');
   }
 
   const authHeader = jwt ? `Bearer ${jwt}` : `ApiKey ${secretKey}`;
@@ -114,12 +120,24 @@ export function buildAPIHTTPClient({
     headers: {
       Authorization: authHeader,
       'Content-Type': 'application/json',
+      'Novu-Environment-Id': environmentId,
     },
   });
 
   const get = async (url, params?: Record<string, string | string[] | number>) => {
     try {
       const response = await httpClient.get(url, { params });
+
+      return response.data;
+    } catch (error) {
+      // TODO: Handle error?.response?.data || error?.response || error;
+      throw error;
+    }
+  };
+
+  const post = async (url, data = {}) => {
+    try {
+      const response = await httpClient.post(url, data);
 
       return response.data;
     } catch (error) {
@@ -135,6 +153,23 @@ export function buildAPIHTTPClient({
 
     async getNotification(notificationId: string) {
       return get(`/v1/notifications/${notificationId}`);
+    },
+
+    async getApiKeys() {
+      return get(`/v1/environments/api-keys`);
+    },
+
+    async syncBridge(bridgeUrl: string) {
+      return post(`/v1/bridge/sync?source=studio`, {
+        bridgeUrl,
+      });
+    },
+
+    async postTelemetry(event: string, data?: Record<string, unknown>) {
+      return post('/v1/telemetry/measure', {
+        event,
+        data,
+      });
     },
   };
 }

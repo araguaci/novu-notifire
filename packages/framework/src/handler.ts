@@ -3,18 +3,21 @@ import { createHmac } from 'node:crypto';
 import { Client } from './client';
 import {
   ErrorCodeEnum,
+  FRAMEWORK_VERSION,
   GetActionEnum,
   HttpHeaderKeysEnum,
   HttpMethodEnum,
   HttpQueryKeysEnum,
   HttpStatusEnum,
   PostActionEnum,
+  SDK_VERSION,
   SIGNATURE_TIMESTAMP_TOLERANCE,
 } from './constants';
 import {
+  BridgeError,
+  FrameworkError,
   InvalidActionError,
   MethodNotAllowedError,
-  NovuError,
   PlatformError,
   SignatureExpiredError,
   SignatureInvalidError,
@@ -22,26 +25,29 @@ import {
   SignatureNotFoundError,
   SigningKeyNotFoundError,
 } from './errors';
-import { FRAMEWORK_VERSION, SDK_VERSION } from './version';
-import { Awaitable, DiscoverWorkflowOutput, TriggerEvent } from './types';
+import type { Awaitable, EventTriggerParams, Workflow } from './types';
 import { initApiClient } from './utils';
 
 // eslint-disable-next-line @typescript-eslint/naming-convention
-export interface ServeHandlerOptions {
+export type ServeHandlerOptions = {
   client?: Client;
-  workflows: Array<DiscoverWorkflowOutput>;
-}
+  workflows: Array<Workflow>;
+};
 
-interface INovuRequestHandlerOptions<Input extends any[] = any[], Output = any> extends ServeHandlerOptions {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type INovuRequestHandlerOptions<Input extends any[] = any[], Output = any> = ServeHandlerOptions & {
   frameworkName: string;
   client?: Client;
-  workflows: Array<DiscoverWorkflowOutput>;
+  workflows: Array<Workflow>;
   handler: Handler<Input, Output>;
-}
+};
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler<Input extends any[] = any[], Output = any> = (...args: Input) => HandlerResponse<Output>;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type HandlerResponse<Output = any> = {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   body: () => Awaitable<any>;
   headers: (key: string) => Awaitable<string | null | undefined>;
   method: () => Awaitable<string>;
@@ -50,12 +56,13 @@ type HandlerResponse<Output = any> = {
   transformResponse: (res: IActionResponse<string>) => Output;
 };
 
-interface IActionResponse<TBody extends string = string> {
+export type IActionResponse<TBody extends string = string> = {
   status: number;
   headers: Record<string, string>;
   body: TBody;
-}
+};
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
   public readonly frameworkName: string;
 
@@ -96,12 +103,12 @@ export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
       [HttpHeaderKeysEnum.ACCESS_CONTROL_MAX_AGE]: '604800',
       [HttpHeaderKeysEnum.NOVU_FRAMEWORK_VERSION]: FRAMEWORK_VERSION,
       [HttpHeaderKeysEnum.NOVU_FRAMEWORK_SDK]: SDK_VERSION,
-      [HttpHeaderKeysEnum.NOVU_FRAMEWORK_API]: this.frameworkName,
+      [HttpHeaderKeysEnum.NOVU_FRAMEWORK_SERVER]: this.frameworkName,
       [HttpHeaderKeysEnum.USER_AGENT]: sdkVersion,
     };
   }
 
-  private createResponse<TBody extends string = string>(status: number, body: any): IActionResponse<TBody> {
+  private createResponse<TBody extends string = string>(status: number, body: unknown): IActionResponse<TBody> {
     return {
       status,
       body: JSON.stringify(body) as TBody,
@@ -111,7 +118,7 @@ export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
     };
   }
 
-  private createError<TBody extends string = string>(error: NovuError): IActionResponse<TBody> {
+  private createError<TBody extends string = string>(error: FrameworkError): IActionResponse<TBody> {
     return {
       status: error.statusCode,
       body: JSON.stringify({
@@ -133,11 +140,6 @@ export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
       (await actions.headers(HttpHeaderKeysEnum.NOVU_SIGNATURE)) ||
       (await actions.headers(HttpHeaderKeysEnum.NOVU_SIGNATURE_DEPRECATED)) ||
       '';
-    const anonymousHeader =
-      (await actions.headers(HttpHeaderKeysEnum.NOVU_ANONYMOUS)) ||
-      (await actions.headers(HttpHeaderKeysEnum.NOVU_ANONYMOUS_DEPRECATED)) ||
-      '';
-    const source = url.searchParams.get(HttpQueryKeysEnum.SOURCE) || '';
 
     let body: Record<string, unknown> = {};
     try {
@@ -153,7 +155,7 @@ export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
         this.validateHmac(body, signatureHeader);
       }
 
-      const postActionMap = this.getPostActionMap(body, workflowId, stepId, action, anonymousHeader, source);
+      const postActionMap = this.getPostActionMap(body, workflowId, stepId, action);
       const getActionMap = this.getGetActionMap(workflowId, stepId);
 
       if (method === HttpMethodEnum.POST) {
@@ -175,12 +177,12 @@ export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
   }
 
   private getPostActionMap(
+    // TODO: add validation for body per action.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     body: any,
     workflowId: string,
     stepId: string,
-    action: string,
-    anonymousHeader: string,
-    source: string
+    action: string
   ): Record<PostActionEnum, () => Promise<IActionResponse>> {
     return {
       [PostActionEnum.TRIGGER]: this.triggerAction({ workflowId, ...body }),
@@ -207,7 +209,7 @@ export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
     };
   }
 
-  public triggerAction(triggerEvent: TriggerEvent) {
+  public triggerAction(triggerEvent: EventTriggerParams) {
     return async () => {
       const requestPayload = {
         name: triggerEvent.workflowId,
@@ -218,6 +220,7 @@ export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
         ...(triggerEvent.actor && { actor: triggerEvent.actor }),
         ...(triggerEvent.tenant && { tenant: triggerEvent.tenant }),
         ...(triggerEvent.bridgeUrl && { bridgeUrl: triggerEvent.bridgeUrl }),
+        ...(triggerEvent.controls && { controls: triggerEvent.controls }),
       };
 
       const result = await this.http.post('/events/trigger', requestPayload);
@@ -272,25 +275,34 @@ export class NovuRequestHandler<Input extends any[] = any[], Output = any> {
     }
   }
 
-  private isClientError(error: unknown): error is NovuError {
-    return Object.values(ErrorCodeEnum).includes((error as NovuError).code);
+  private isBridgeError(error: unknown): error is FrameworkError {
+    return Object.values(ErrorCodeEnum).includes((error as FrameworkError)?.code);
+  }
+
+  private isPlatformError(error: unknown): error is PlatformError {
+    // TODO: replace with check against known Platform error codes.
+    return (error as PlatformError)?.statusCode >= 400 && (error as PlatformError)?.statusCode < 500;
   }
 
   private handleError(error: unknown): IActionResponse {
-    if (this.isClientError(error)) {
+    if (this.isBridgeError(error)) {
       if (error.statusCode === HttpStatusEnum.INTERNAL_SERVER_ERROR) {
+        /*
+         * Log bridge application exceptions to assist the Developer in debugging errors with their integration.
+         * This path is reached when the Bridge application throws an error, ensuring they can see the error in their logs.
+         */
         // eslint-disable-next-line no-console
         console.error(error);
       }
 
       return this.createError(error);
-    } else if ((error as any).response.status === HttpStatusEnum.BAD_REQUEST) {
-      return this.createError((error as { response: NovuError }).response);
+    } else if (this.isPlatformError(error)) {
+      return this.createError(error);
     } else {
       // eslint-disable-next-line no-console
       console.error(error);
 
-      return this.createError(new PlatformError());
+      return this.createError(new BridgeError());
     }
   }
 
